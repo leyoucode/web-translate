@@ -1,0 +1,83 @@
+/* 译文块 */
+.wt-translation {
+  margin: 4px 0 8px 0;
+  padding: 8px 12px;
+  background: #f0f7ff;
+  border-left: 3px solid #007aff;
+  border-radius: 0 4px 4px 0;
+  font-size: 0.92em;
+  line-height: 1.6;
+  color: #1a1a1a;
+  opacity: 0;
+  animation: wt-fade-in 0.3s ease forwards;
+}
+
+.wt-translation-done {
+  opacity: 1;
+}
+
+/* 替换模式：译文继承原文样式 */
+.wt-translation.wt-replace-mode {
+  margin: 0;
+  padding: 0;
+  background: none;
+  border-left: none;
+  border-radius: 0;
+  font-size: inherit;
+  color: inherit;
+}
+
+/* 替换模式：隐藏原文 */
+.wt-original-hidden {
+  display: none !important;
+}
+
+.wt-translation-error {
+  background: #fff0f0;
+  border-left-color: #ff3b30;
+  color: #cc0000;
+}
+
+@keyframes wt-fade-in {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* 进度条 */
+.wt-progress-bar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 2147483647;
+  background: #fff;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.1);
+  padding: 6px 16px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-size: 12px;
+  color: #666;
+}
+
+.wt-progress-track {
+  flex: 1;
+  height: 4px;
+  background: #e5e5e5;
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.wt-progress-fill {
+  height: 100%;
+  background: #007aff;
+  border-radius: 2px;
+  transition: width 0.3s ease;
+}
+
+.wt-progress-text {
+  white-space: nowrap;
+  min-width: 160px;
+  text-align: right;
+}

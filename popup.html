@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      width: 280px;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      font-size: 14px;
+      color: #333;
+      padding: 16px;
+    }
+    .header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 16px;
+      padding-bottom: 12px;
+      border-bottom: 1px solid #e5e5e5;
+    }
+    .header h1 {
+      font-size: 16px;
+      font-weight: 600;
+    }
+    .status {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 12px;
+      color: #666;
+      margin-bottom: 12px;
+    }
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #ccc;
+    }
+    .status-dot.connected { background: #34c759; }
+    .status-dot.error { background: #ff3b30; }
+    .btn {
+      display: block;
+      width: 100%;
+      padding: 10px 16px;
+      border: none;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+    .btn-primary {
+      background: #007aff;
+      color: #fff;
+    }
+    .btn-primary:hover { background: #0066d6; }
+    .btn-primary:disabled {
+      background: #b0b0b0;
+      cursor: not-allowed;
+    }
+    .btn-secondary {
+      background: #f0f0f0;
+      color: #333;
+      margin-top: 8px;
+    }
+    .btn-secondary:hover { background: #e0e0e0; }
+    .progress {
+      margin-top: 12px;
+      font-size: 12px;
+      color: #666;
+      text-align: center;
+    }
+    .error-text {
+      color: #ff3b30;
+      font-size: 12px;
+      margin-top: 8px;
+    }
+    .setting {
+      margin-top: 12px;
+      padding-top: 12px;
+      border-top: 1px solid #e5e5e5;
+    }
+    .setting-label {
+      font-size: 12px;
+      color: #666;
+      margin-bottom: 6px;
+    }
+    .mode-options {
+      display: flex;
+      gap: 6px;
+    }
+    .mode-btn {
+      flex: 1;
+      padding: 6px 8px;
+      border: 1.5px solid #ddd;
+      border-radius: 6px;
+      background: #fff;
+      font-size: 12px;
+      color: #333;
+      cursor: pointer;
+      text-align: center;
+      transition: all 0.2s;
+    }
+    .mode-btn:hover { border-color: #007aff; }
+    .mode-btn.active {
+      border-color: #007aff;
+      background: #eef5ff;
+      color: #007aff;
+      font-weight: 500;
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1>网页翻译</h1>
+  </div>
+
+  <div class="status" id="ollamaStatus">
+    <span class="status-dot" id="statusDot"></span>
+    <span id="statusText">检查 Ollama 连接...</span>
+  </div>
+
+  <button class="btn btn-primary" id="translateBtn" disabled>翻译此页</button>
+  <button class="btn btn-secondary" id="toggleBtn">隐藏译文</button>
+
+  <div class="setting">
+    <div class="setting-label">显示方式</div>
+    <div class="mode-options">
+      <button class="mode-btn active" data-mode="bilingual">双语对照</button>
+      <button class="mode-btn" data-mode="replace">替换原文</button>
+    </div>
+  </div>
+
+  <div class="progress" id="progress" style="display:none"></div>
+  <div class="error-text" id="errorText" style="display:none"></div>
+
+  <script src="popup.js"></script>
+</body>
+</html>
