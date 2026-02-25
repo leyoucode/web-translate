@@ -1,6 +1,40 @@
 const OLLAMA_URL = 'http://localhost:11434';
 const DEFAULT_MODEL = 'qwen2:7b';
 
+// Translation cache: key = "model:text", value = translated result
+const translationCache = new Map();
+const CACHE_MAX_SIZE = 500;
+
+// Create context menu on install
+chrome.runtime.onInstalled.addListener(() => {
+  chrome.contextMenus.create({
+    id: 'translate-selection',
+    title: '翻译选中文本',
+    contexts: ['selection'],
+  });
+});
+
+// Keyboard shortcut listener
+chrome.commands.onCommand.addListener(async (command) => {
+  if (command === 'translate-page') {
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    if (tab?.id) {
+      chrome.tabs.sendMessage(tab.id, { action: 'startTranslate' });
+    }
+  }
+});
+
+// Context menu click listener
+chrome.contextMenus.onClicked.addListener(async (info, tab) => {
+  if (info.menuItemId === 'translate-selection' && info.selectionText && tab?.id) {
+    chrome.tabs.sendMessage(tab.id, {
+      action: 'translateSelection',
+      text: info.selectionText,
+    });
+  }
+});
+
+// Port connections
 chrome.runtime.onConnect.addListener((port) => {
   if (port.name !== 'translate') return;
 
@@ -16,6 +50,10 @@ chrome.runtime.onConnect.addListener((port) => {
 async function getSelectedModel() {
   const { selectedModel } = await chrome.storage.local.get('selectedModel');
   return selectedModel || DEFAULT_MODEL;
+}
+
+function getCacheKey(model, text) {
+  return `${model}:${text}`;
 }
 
 async function handleCheckOllama(port) {
@@ -41,6 +79,19 @@ async function handleCheckOllama(port) {
 async function handleTranslate(port, msg) {
   const { text, elementId } = msg;
   const model = await getSelectedModel();
+  const cacheKey = getCacheKey(model, text);
+
+  // Check cache first
+  if (translationCache.has(cacheKey)) {
+    const cached = translationCache.get(cacheKey);
+    port.postMessage({
+      type: 'translation-chunk',
+      elementId,
+      text: cached,
+      done: true,
+    });
+    return;
+  }
 
   try {
     const res = await fetch(`${OLLAMA_URL}/api/chat`, {
@@ -91,6 +142,13 @@ async function handleTranslate(port, msg) {
             });
           }
           if (json.done) {
+            // Store in cache
+            if (translationCache.size >= CACHE_MAX_SIZE) {
+              const firstKey = translationCache.keys().next().value;
+              translationCache.delete(firstKey);
+            }
+            translationCache.set(cacheKey, accumulated);
+
             port.postMessage({
               type: 'translation-chunk',
               elementId,

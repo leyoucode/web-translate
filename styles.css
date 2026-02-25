@@ -81,3 +81,46 @@
   min-width: 160px;
   text-align: right;
 }
+
+/* 选中文本翻译浮窗 */
+.wt-selection-tooltip {
+  position: absolute;
+  z-index: 2147483647;
+  max-width: 360px;
+  min-width: 120px;
+  padding: 10px 28px 10px 12px;
+  background: #fff;
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-size: 14px;
+  line-height: 1.6;
+  color: #1a1a1a;
+  opacity: 0;
+  animation: wt-fade-in 0.2s ease forwards;
+}
+
+.wt-tooltip-done {
+  border-left: 3px solid #007aff;
+}
+
+.wt-tooltip-error {
+  border-left: 3px solid #ff3b30;
+  color: #cc0000;
+}
+
+.wt-tooltip-close {
+  position: absolute;
+  top: 6px;
+  right: 8px;
+  cursor: pointer;
+  color: #999;
+  font-size: 12px;
+  line-height: 1;
+  padding: 2px;
+}
+
+.wt-tooltip-close:hover {
+  color: #333;
+}

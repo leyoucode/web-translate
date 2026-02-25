@@ -47,6 +47,9 @@
     } else if (msg.action === 'setDisplayMode') {
       switchDisplayMode(msg.mode);
       sendResponse({ mode: displayMode });
+    } else if (msg.action === 'translateSelection') {
+      translateSelection(msg.text);
+      sendResponse({ status: 'started' });
     }
     return true;
   });
@@ -350,5 +353,89 @@
       progressBar.remove();
       progressBar = null;
     }
+  }
+
+  // --- Selection translation tooltip ---
+  function translateSelection(text) {
+    if (!text || !text.trim()) return;
+
+    // Remove existing tooltip
+    removeSelectionTooltip();
+
+    // Position near selection
+    const selection = window.getSelection();
+    if (!selection.rangeCount) return;
+    const range = selection.getRangeAt(0);
+    const rect = range.getBoundingClientRect();
+
+    const tooltip = document.createElement('div');
+    tooltip.className = 'wt-selection-tooltip';
+    tooltip.id = 'wt-selection-tooltip';
+    tooltip.textContent = '翻译中...';
+
+    // Close button
+    const closeBtn = document.createElement('span');
+    closeBtn.className = 'wt-tooltip-close';
+    closeBtn.textContent = '✕';
+    closeBtn.addEventListener('click', removeSelectionTooltip);
+    tooltip.prepend(closeBtn);
+
+    document.body.appendChild(tooltip);
+
+    // Position: below selection, clamped to viewport
+    const top = rect.bottom + window.scrollY + 6;
+    const left = Math.max(8, Math.min(
+      rect.left + window.scrollX,
+      window.innerWidth - 320
+    ));
+    tooltip.style.top = `${top}px`;
+    tooltip.style.left = `${left}px`;
+
+    // Translate via port
+    const selPort = chrome.runtime.connect({ name: 'translate' });
+    const selId = `wt-sel-${Date.now()}`;
+
+    selPort.onMessage.addListener((msg) => {
+      if (msg.elementId !== selId) return;
+      const content = tooltip.lastChild;
+      if (msg.type === 'translation-chunk') {
+        // Keep close button, update text
+        if (content.nodeType === Node.TEXT_NODE) {
+          content.textContent = msg.text;
+        } else {
+          tooltip.appendChild(document.createTextNode(msg.text));
+        }
+        if (msg.done) {
+          tooltip.classList.add('wt-tooltip-done');
+          selPort.disconnect();
+        }
+      } else if (msg.type === 'translation-error') {
+        if (content.nodeType === Node.TEXT_NODE) {
+          content.textContent = `⚠️ ${msg.error}`;
+        }
+        tooltip.classList.add('wt-tooltip-error');
+        selPort.disconnect();
+      }
+    });
+
+    selPort.postMessage({ type: 'translate', text: text.trim(), elementId: selId });
+
+    // Close on click outside
+    setTimeout(() => {
+      document.addEventListener('mousedown', onClickOutside);
+    }, 100);
+  }
+
+  function onClickOutside(e) {
+    const tooltip = document.getElementById('wt-selection-tooltip');
+    if (tooltip && !tooltip.contains(e.target)) {
+      removeSelectionTooltip();
+    }
+  }
+
+  function removeSelectionTooltip() {
+    const tooltip = document.getElementById('wt-selection-tooltip');
+    if (tooltip) tooltip.remove();
+    document.removeEventListener('mousedown', onClickOutside);
   }
 })();
