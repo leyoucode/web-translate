@@ -5,6 +5,7 @@ const statusText = document.getElementById('statusText');
 const progressDiv = document.getElementById('progress');
 const errorText = document.getElementById('errorText');
 const modeBtns = document.querySelectorAll('.mode-btn');
+const modelSelect = document.getElementById('modelSelect');
 
 let ollamaConnected = false;
 let isTranslating = false;
@@ -13,6 +14,11 @@ let isTranslating = false;
 checkOllamaStatus();
 checkTranslationStatus();
 loadDisplayMode();
+
+// Model selection
+modelSelect.addEventListener('change', async () => {
+  await chrome.storage.local.set({ selectedModel: modelSelect.value });
+});
 
 translateBtn.addEventListener('click', async () => {
   if (!ollamaConnected || isTranslating) return;
@@ -79,20 +85,22 @@ async function checkOllamaStatus() {
   try {
     const port = chrome.runtime.connect({ name: 'translate' });
 
-    port.onMessage.addListener((msg) => {
+    port.onMessage.addListener(async (msg) => {
       if (msg.type === 'ollama-status') {
         port.disconnect();
-        if (msg.connected && msg.modelLoaded) {
+        if (msg.connected && msg.models?.length > 0) {
           ollamaConnected = true;
           statusDot.classList.add('connected');
-          statusText.textContent = 'Ollama 已连接 (qwen2:7b)';
+          statusText.textContent = `Ollama 已连接 (${msg.models.length} 个模型)`;
           if (!isTranslating) {
             translateBtn.disabled = false;
           }
-        } else if (msg.connected && !msg.modelLoaded) {
+          await populateModels(msg.models);
+        } else if (msg.connected) {
           statusDot.classList.add('error');
-          statusText.textContent = 'Ollama 已连接，但 qwen2 模型未加载';
-          showError('请运行: ollama pull qwen2:7b');
+          statusText.textContent = 'Ollama 已连接，但没有可用模型';
+          showError('请运行: ollama pull <模型名>');
+          modelSelect.innerHTML = '<option value="">无可用模型</option>';
         } else {
           statusDot.classList.add('error');
           statusText.textContent = 'Ollama 未连接';
@@ -107,6 +115,27 @@ async function checkOllamaStatus() {
     statusText.textContent = 'Ollama 未连接';
     showError('请确保 Ollama 正在运行');
   }
+}
+
+async function populateModels(models) {
+  const { selectedModel } = await chrome.storage.local.get('selectedModel');
+  modelSelect.innerHTML = '';
+
+  for (const name of models) {
+    const opt = document.createElement('option');
+    opt.value = name;
+    opt.textContent = name;
+    if (name === selectedModel) opt.selected = true;
+    modelSelect.appendChild(opt);
+  }
+
+  // If no saved selection or saved model no longer available, select first and save
+  if (!selectedModel || !models.includes(selectedModel)) {
+    modelSelect.value = models[0];
+    await chrome.storage.local.set({ selectedModel: models[0] });
+  }
+
+  modelSelect.disabled = false;
 }
 
 async function checkTranslationStatus() {

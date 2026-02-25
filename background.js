@@ -1,5 +1,5 @@
 const OLLAMA_URL = 'http://localhost:11434';
-const MODEL = 'qwen2:7b';
+const DEFAULT_MODEL = 'qwen2:7b';
 
 chrome.runtime.onConnect.addListener((port) => {
   if (port.name !== 'translate') return;
@@ -13,35 +13,41 @@ chrome.runtime.onConnect.addListener((port) => {
   });
 });
 
+async function getSelectedModel() {
+  const { selectedModel } = await chrome.storage.local.get('selectedModel');
+  return selectedModel || DEFAULT_MODEL;
+}
+
 async function handleCheckOllama(port) {
   try {
     const res = await fetch(`${OLLAMA_URL}/api/tags`);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
-    const hasModel = data.models?.some((m) => m.name.startsWith('qwen2'));
+    const models = (data.models || []).map((m) => m.name);
     port.postMessage({
       type: 'ollama-status',
       connected: true,
-      modelLoaded: hasModel,
+      models,
     });
   } catch {
     port.postMessage({
       type: 'ollama-status',
       connected: false,
-      modelLoaded: false,
+      models: [],
     });
   }
 }
 
 async function handleTranslate(port, msg) {
   const { text, elementId } = msg;
+  const model = await getSelectedModel();
 
   try {
     const res = await fetch(`${OLLAMA_URL}/api/chat`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        model: MODEL,
+        model,
         stream: true,
         messages: [
           {
