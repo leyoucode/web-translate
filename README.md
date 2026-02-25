@@ -4,7 +4,8 @@
 
 ## 特性
 
-- **本地翻译** — 通过本地 Ollama 服务调用 qwen2:7b 模型，数据不离开本机
+- **本地翻译** — 通过本地 Ollama 服务调用大语言模型，数据不离开本机
+- **模型可选** — 自动获取本地已安装的 Ollama 模型列表，自由切换
 - **双语对照** — 译文显示在原文下方，方便对照阅读
 - **替换原文** — 可切换为替换模式，译文直接替代原文，阅读更沉浸
 - **流式显示** — 翻译结果逐段实时显示，无需等待全部完成
@@ -14,14 +15,16 @@
 ## 前置要求
 
 - [Ollama](https://ollama.ai) 已安装并运行
-- qwen2:7b 模型已下载
+- 至少下载一个模型
 
 ```bash
 # 启动 Ollama
 ollama serve
 
-# 下载模型（首次使用）
+# 下载模型（任选其一或多个）
 ollama pull qwen2:7b
+ollama pull qwen2.5:7b
+ollama pull llama3.1
 ```
 
 ## 安装
@@ -36,8 +39,9 @@ ollama pull qwen2:7b
 1. 打开任意英文网页
 2. 点击浏览器工具栏中的插件图标
 3. 确认 Ollama 连接状态为绿色
-4. 选择显示方式（双语对照 / 替换原文）
-5. 点击「翻译此页」
+4. 从下拉框选择翻译模型
+5. 选择显示方式（双语对照 / 替换原文）
+6. 点击「翻译此页」
 
 ## 项目结构
 
@@ -57,7 +61,7 @@ web-translate/
 - **Chrome Extension Manifest V3**
 - **Ollama REST API**（`localhost:11434`），流式响应
 - Service Worker 与 Content Script 通过 `chrome.runtime.connect`（Port）长连接通信
-- 显示模式配置通过 `chrome.storage.local` 持久化
+- 模型选择与显示模式配置通过 `chrome.storage.local` 持久化
 
 ## License
 
