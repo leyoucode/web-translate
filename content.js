@@ -23,10 +23,28 @@
   let translationsVisible = true;
   let idCounter = 0;
   let displayMode = 'bilingual'; // 'bilingual' | 'replace'
+  let selectionMode = 'menu'; // 'menu' | 'auto'
 
-  // Load saved display mode
-  chrome.storage.local.get('displayMode', (res) => {
+  // Load saved settings
+  chrome.storage.local.get(['displayMode', 'selectionMode'], (res) => {
     displayMode = res.displayMode || 'bilingual';
+    selectionMode = res.selectionMode || 'menu';
+  });
+
+  // Auto selection translate on mouseup
+  document.addEventListener('mouseup', (e) => {
+    if (selectionMode !== 'auto') return;
+    // Ignore clicks on our own UI
+    if (e.target.closest('.wt-selection-tooltip, .wt-translation, .wt-progress-bar')) return;
+
+    // Small delay to let browser finalize selection
+    setTimeout(() => {
+      const sel = window.getSelection();
+      const text = sel?.toString().trim();
+      if (text && text.length >= 2 && shouldTranslate(text)) {
+        translateSelection(text);
+      }
+    }, 50);
   });
 
   // Listen for messages from popup
@@ -50,6 +68,9 @@
     } else if (msg.action === 'translateSelection') {
       translateSelection(msg.text);
       sendResponse({ status: 'started' });
+    } else if (msg.action === 'setSelectionMode') {
+      selectionMode = msg.mode;
+      sendResponse({ mode: selectionMode });
     }
     return true;
   });

@@ -10,10 +10,13 @@ const modelSelect = document.getElementById('modelSelect');
 let ollamaConnected = false;
 let isTranslating = false;
 
+const selectBtns = document.querySelectorAll('[data-select]');
+
 // Check Ollama status on popup open
 checkOllamaStatus();
 checkTranslationStatus();
 loadDisplayMode();
+loadSelectionMode();
 
 // Model selection
 modelSelect.addEventListener('change', async () => {
@@ -72,6 +75,32 @@ modeBtns.forEach((btn) => {
     }
   });
 });
+
+// Selection mode switching
+selectBtns.forEach((btn) => {
+  btn.addEventListener('click', async () => {
+    const mode = btn.dataset.select;
+    selectBtns.forEach((b) => b.classList.remove('active'));
+    btn.classList.add('active');
+
+    await chrome.storage.local.set({ selectionMode: mode });
+
+    try {
+      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+      await chrome.tabs.sendMessage(tab.id, { action: 'setSelectionMode', mode });
+    } catch {
+      // Content script not ready
+    }
+  });
+});
+
+async function loadSelectionMode() {
+  const { selectionMode } = await chrome.storage.local.get('selectionMode');
+  const mode = selectionMode || 'menu';
+  selectBtns.forEach((b) => {
+    b.classList.toggle('active', b.dataset.select === mode);
+  });
+}
 
 async function loadDisplayMode() {
   const { displayMode } = await chrome.storage.local.get('displayMode');
