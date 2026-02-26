@@ -63,16 +63,14 @@ modeBtns.forEach((btn) => {
     modeBtns.forEach((b) => b.classList.remove('active'));
     btn.classList.add('active');
 
-    // Save to storage
-    await chrome.storage.local.set({ displayMode: mode });
-
-    // Notify content script to switch mode
+    // Notify content script first, then persist
     try {
       const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
       await chrome.tabs.sendMessage(tab.id, { action: 'setDisplayMode', mode });
     } catch {
-      // Content script not ready yet, that's fine — it will read from storage on next translate
+      // Content script not ready yet — it will read from storage on next translate
     }
+    await chrome.storage.local.set({ displayMode: mode });
   });
 });
 

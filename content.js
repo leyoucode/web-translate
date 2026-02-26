@@ -25,10 +25,10 @@
   let displayMode = 'bilingual'; // 'bilingual' | 'replace'
   let selectionMode = 'menu'; // 'menu' | 'auto'
 
-  // Load saved settings
+  // Load saved settings (only set defaults, don't override message-driven updates)
   chrome.storage.local.get(['displayMode', 'selectionMode'], (res) => {
-    displayMode = res.displayMode || 'bilingual';
-    selectionMode = res.selectionMode || 'menu';
+    if (res.displayMode) displayMode = res.displayMode;
+    if (res.selectionMode) selectionMode = res.selectionMode;
   });
 
   // Auto selection translate on mouseup
@@ -76,7 +76,6 @@
   });
 
   function switchDisplayMode(newMode) {
-    if (newMode === displayMode) return;
     displayMode = newMode;
 
     // Update all already-translated elements
@@ -88,11 +87,9 @@
       if (!transDiv) return;
 
       if (displayMode === 'replace') {
-        // Hide original, restyle translation
         el.classList.add('wt-original-hidden');
         transDiv.classList.add('wt-replace-mode');
       } else {
-        // Show original, restore bilingual style
         el.classList.remove('wt-original-hidden');
         transDiv.classList.remove('wt-replace-mode');
       }
