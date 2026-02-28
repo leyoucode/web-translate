@@ -124,3 +124,32 @@
 .wt-tooltip-close:hover {
   color: #333;
 }
+
+.wt-speaker-icon {
+  position: absolute;
+  top: 5px;
+  right: 28px;
+  cursor: pointer;
+  color: #999;
+  padding: 2px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: color 0.2s, transform 0.1s;
+}
+
+.wt-speaker-icon:hover {
+  color: #007aff;
+  transform: scale(1.1);
+}
+
+.wt-speaker-icon.wt-speaking {
+  color: #007aff;
+  animation: wt-pulse 1s infinite;
+}
+
+@keyframes wt-pulse {
+  0% { opacity: 1; }
+  50% { opacity: 0.5; }
+  100% { opacity: 1; }
+}
