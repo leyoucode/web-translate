@@ -65,6 +65,7 @@ web-translate/
 ├── popup.html      # 弹出窗口 UI
 ├── popup.js        # 弹出窗口逻辑
 ├── styles.css      # 双语对照与替换模式样式
+├── rules.json      # declarativeNetRequest 规则，修改 Origin 头
 └── icons/          # 扩展图标
 ```
 
@@ -74,6 +75,7 @@ web-translate/
 - **Ollama REST API**（`localhost:11434`），流式响应
 - Service Worker 与 Content Script 通过 `chrome.runtime.connect`（Port）长连接通信
 - 模型选择与显示模式配置通过 `chrome.storage.local` 持久化
+- 通过 `declarativeNetRequest` 重写 `Origin` 请求头，解决 Ollama CORS 403 问题
 
 ## License
 
