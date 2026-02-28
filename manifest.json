@@ -3,7 +3,14 @@
   "name": "Web Translate - 双语对照翻译",
   "version": "1.1.0",
   "description": "使用本地 Ollama 模型实现网页双语对照翻译",
-  "permissions": ["activeTab", "storage", "contextMenus"],
+  "permissions": ["activeTab", "storage", "contextMenus", "declarativeNetRequest"],
+  "declarative_net_request": {
+    "rule_resources": [{
+      "id": "ruleset_ollama",
+      "enabled": true,
+      "path": "rules.json"
+    }]
+  },
   "host_permissions": ["http://localhost:11434/*"],
   "background": {
     "service_worker": "background.js"
