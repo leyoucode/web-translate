@@ -17,6 +17,8 @@
 
   let port = null;
   let translating = false;
+  let paused = false;
+  let resumeResolve = null;
   let totalElements = 0;
   let doneElements = 0;
   let progressBar = null;
@@ -55,9 +57,22 @@
     } else if (msg.action === 'toggleTranslation') {
       toggleTranslations();
       sendResponse({ visible: translationsVisible });
+    } else if (msg.action === 'pauseTranslate') {
+      paused = true;
+      updateProgressPaused();
+      sendResponse({ paused: true });
+    } else if (msg.action === 'resumeTranslate') {
+      paused = false;
+      if (resumeResolve) {
+        resumeResolve();
+        resumeResolve = null;
+      }
+      updateProgress();
+      sendResponse({ paused: false });
     } else if (msg.action === 'getStatus') {
       sendResponse({
         translating,
+        paused,
         total: totalElements,
         done: doneElements,
         visible: translationsVisible,
@@ -119,6 +134,8 @@
   function startTranslation() {
     if (translating) return;
     translating = true;
+    paused = false;
+    resumeResolve = null;
     doneElements = 0;
     idCounter = 0;
 
@@ -213,6 +230,12 @@
     for (const el of elements) {
       if (!translating) break;
 
+      // Wait if paused
+      if (paused) {
+        await new Promise((r) => { resumeResolve = r; });
+      }
+      if (!translating) break;
+
       const text = getDirectText(el);
       if (!text) {
         doneElements++;
@@ -266,6 +289,8 @@
     }
 
     translating = false;
+    paused = false;
+    resumeResolve = null;
     finishProgress();
   }
 
@@ -344,7 +369,26 @@
         <div class="wt-progress-fill" style="width: 0%"></div>
       </div>
       <span class="wt-progress-text">准备翻译...</span>
+      <button class="wt-progress-pause" title="暂停翻译">⏸</button>
     `;
+    const pauseBtn = progressBar.querySelector('.wt-progress-pause');
+    pauseBtn.addEventListener('click', () => {
+      if (paused) {
+        paused = false;
+        if (resumeResolve) {
+          resumeResolve();
+          resumeResolve = null;
+        }
+        pauseBtn.textContent = '⏸';
+        pauseBtn.title = '暂停翻译';
+        updateProgress();
+      } else {
+        paused = true;
+        pauseBtn.textContent = '▶';
+        pauseBtn.title = '继续翻译';
+        updateProgressPaused();
+      }
+    });
     document.body.prepend(progressBar);
   }
 
@@ -355,6 +399,20 @@
     const text = progressBar.querySelector('.wt-progress-text');
     if (fill) fill.style.width = `${pct}%`;
     if (text) text.textContent = `翻译中... ${doneElements}/${totalElements} (${pct}%)`;
+  }
+
+  function updateProgressPaused() {
+    if (!progressBar) return;
+    const pct = totalElements > 0 ? Math.round((doneElements / totalElements) * 100) : 0;
+    const fill = progressBar.querySelector('.wt-progress-fill');
+    const text = progressBar.querySelector('.wt-progress-text');
+    if (fill) fill.style.width = `${pct}%`;
+    if (text) text.textContent = `已暂停 ${doneElements}/${totalElements} (${pct}%)`;
+    const pauseBtn = progressBar.querySelector('.wt-progress-pause');
+    if (pauseBtn) {
+      pauseBtn.textContent = '▶';
+      pauseBtn.title = '继续翻译';
+    }
   }
 
   function finishProgress() {

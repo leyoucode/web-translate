@@ -4,13 +4,12 @@ const statusDot = document.getElementById('statusDot');
 const statusText = document.getElementById('statusText');
 const progressDiv = document.getElementById('progress');
 const errorText = document.getElementById('errorText');
-const modeBtns = document.querySelectorAll('.mode-btn');
-const modelSelect = document.getElementById('modelSelect');
+const modeBtns = document.querySelectorAll('.segment[data-mode]');
+const selectBtns = document.querySelectorAll('.segment[data-select]');
 
 let ollamaConnected = false;
 let isTranslating = false;
-
-const selectBtns = document.querySelectorAll('[data-select]');
+let isPaused = false;
 
 // Check Ollama status on popup open
 checkOllamaStatus();
@@ -18,30 +17,59 @@ checkTranslationStatus();
 loadDisplayMode();
 loadSelectionMode();
 
-// Model selection
-modelSelect.addEventListener('change', async () => {
-  await chrome.storage.local.set({ selectedModel: modelSelect.value });
-});
-
 translateBtn.addEventListener('click', async () => {
-  if (!ollamaConnected || isTranslating) return;
+  if (!ollamaConnected) return;
 
+  const btnText = translateBtn.querySelector('.btn-text');
+  const btnIcon = translateBtn.querySelector('.btn-icon');
+
+  if (isPaused) {
+    // Resume translation
+    try {
+      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+      await chrome.tabs.sendMessage(tab.id, { action: 'resumeTranslate' });
+      isPaused = false;
+      isTranslating = true;
+      if (btnText) btnText.textContent = '暂停翻译';
+      if (btnIcon) btnIcon.textContent = '⏸';
+    } catch {
+      showError('无法连接到页面，请刷新后重试');
+    }
+    return;
+  }
+
+  if (isTranslating) {
+    // Pause translation
+    try {
+      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+      await chrome.tabs.sendMessage(tab.id, { action: 'pauseTranslate' });
+      isPaused = true;
+      isTranslating = false;
+      if (btnText) btnText.textContent = '继续翻译';
+      if (btnIcon) btnIcon.textContent = '▶';
+    } catch {
+      showError('无法连接到页面，请刷新后重试');
+    }
+    return;
+  }
+
+  // Start translation
   errorText.style.display = 'none';
-  translateBtn.disabled = true;
-  translateBtn.textContent = '翻译中...';
+  if (btnText) btnText.textContent = '暂停翻译';
+  if (btnIcon) btnIcon.textContent = '⏸';
+
   isTranslating = true;
   progressDiv.style.display = 'block';
-  progressDiv.textContent = '正在启动翻译...';
+  progressDiv.textContent = '准备翻译中...';
 
   try {
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
     await chrome.tabs.sendMessage(tab.id, { action: 'startTranslate' });
-    // Start polling for progress
     pollProgress();
   } catch (err) {
     showError('无法连接到页面，请刷新后重试');
-    translateBtn.disabled = false;
-    translateBtn.textContent = '翻译此页';
+    if (btnText) btnText.textContent = '翻译此页面';
+    if (btnIcon) btnIcon.textContent = '⚡';
     isTranslating = false;
   }
 });
@@ -50,7 +78,8 @@ toggleBtn.addEventListener('click', async () => {
   try {
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
     const res = await chrome.tabs.sendMessage(tab.id, { action: 'toggleTranslation' });
-    toggleBtn.textContent = res.visible ? '隐藏译文' : '显示译文';
+    const btnText = toggleBtn.querySelector('.btn-text');
+    if (btnText) btnText.textContent = res.visible ? '隐藏译文' : '显示译文';
   } catch {
     showError('无法连接到页面，请刷新后重试');
   }
@@ -63,12 +92,11 @@ modeBtns.forEach((btn) => {
     modeBtns.forEach((b) => b.classList.remove('active'));
     btn.classList.add('active');
 
-    // Notify content script first, then persist
     try {
       const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
       await chrome.tabs.sendMessage(tab.id, { action: 'setDisplayMode', mode });
     } catch {
-      // Content script not ready yet — it will read from storage on next translate
+      // Content script not ready
     }
     await chrome.storage.local.set({ displayMode: mode });
   });
@@ -112,26 +140,20 @@ async function checkOllamaStatus() {
   try {
     const port = chrome.runtime.connect({ name: 'translate' });
 
-    port.onMessage.addListener(async (msg) => {
+    port.onMessage.addListener((msg) => {
       if (msg.type === 'ollama-status') {
         port.disconnect();
-        if (msg.connected && msg.models?.length > 0) {
+        if (msg.connected) {
           ollamaConnected = true;
           statusDot.classList.add('connected');
-          statusText.textContent = `Ollama 已连接 (${msg.models.length} 个模型)`;
-          if (!isTranslating) {
+          statusText.textContent = 'Ollama 已就绪';
+          if (!isTranslating && !isPaused) {
             translateBtn.disabled = false;
           }
-          await populateModels(msg.models);
-        } else if (msg.connected) {
-          statusDot.classList.add('error');
-          statusText.textContent = 'Ollama 已连接，但没有可用模型';
-          showError('请运行: ollama pull <模型名>');
-          modelSelect.innerHTML = '<option value="">无可用模型</option>';
         } else {
           statusDot.classList.add('error');
-          statusText.textContent = 'Ollama 未连接';
-          showError('请确保 Ollama 正在运行 (ollama serve)');
+          statusText.textContent = '未连接';
+          showError('请启动 Ollama');
         }
       }
     });
@@ -139,47 +161,39 @@ async function checkOllamaStatus() {
     port.postMessage({ type: 'check-ollama' });
   } catch {
     statusDot.classList.add('error');
-    statusText.textContent = 'Ollama 未连接';
-    showError('请确保 Ollama 正在运行');
+    statusText.textContent = '连接失败';
   }
-}
-
-async function populateModels(models) {
-  const { selectedModel } = await chrome.storage.local.get('selectedModel');
-  modelSelect.innerHTML = '';
-
-  for (const name of models) {
-    const opt = document.createElement('option');
-    opt.value = name;
-    opt.textContent = name;
-    if (name === selectedModel) opt.selected = true;
-    modelSelect.appendChild(opt);
-  }
-
-  // If no saved selection or saved model no longer available, select first and save
-  if (!selectedModel || !models.includes(selectedModel)) {
-    modelSelect.value = models[0];
-    await chrome.storage.local.set({ selectedModel: models[0] });
-  }
-
-  modelSelect.disabled = false;
 }
 
 async function checkTranslationStatus() {
   try {
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
     const status = await chrome.tabs.sendMessage(tab.id, { action: 'getStatus' });
-    if (status.translating) {
-      isTranslating = true;
-      translateBtn.disabled = true;
-      translateBtn.textContent = '翻译中...';
+    const btnText = translateBtn.querySelector('.btn-text');
+    const btnIcon = translateBtn.querySelector('.btn-icon');
+    const toggleBtnText = toggleBtn.querySelector('.btn-text');
+
+    if (status.paused) {
+      isPaused = true;
+      isTranslating = false;
+      translateBtn.disabled = false;
+      if (btnText) btnText.textContent = '继续翻译';
+      if (btnIcon) btnIcon.textContent = '▶';
       progressDiv.style.display = 'block';
-      progressDiv.textContent = `翻译中... ${status.done}/${status.total}`;
+      const pct = status.total > 0 ? Math.round((status.done / status.total) * 100) : 0;
+      progressDiv.textContent = `已暂停 ${pct}% (${status.done}/${status.total})`;
+    } else if (status.translating) {
+      isTranslating = true;
+      translateBtn.disabled = false;
+      if (btnText) btnText.textContent = '暂停翻译';
+      if (btnIcon) btnIcon.textContent = '⏸';
+      progressDiv.style.display = 'block';
+      progressDiv.textContent = `进度: ${status.done}/${status.total}`;
       pollProgress();
     }
-    toggleBtn.textContent = status.visible ? '隐藏译文' : '显示译文';
+    if (toggleBtnText) toggleBtnText.textContent = status.visible ? '隐藏译文' : '显示译文';
   } catch {
-    // Content script not loaded yet
+    // Content script not loaded
   }
 }
 
@@ -188,18 +202,34 @@ function pollProgress() {
     try {
       const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
       const status = await chrome.tabs.sendMessage(tab.id, { action: 'getStatus' });
+      const btnText = translateBtn.querySelector('.btn-text');
+      const btnIcon = translateBtn.querySelector('.btn-icon');
 
       if (status.total > 0) {
         const pct = Math.round((status.done / status.total) * 100);
-        progressDiv.textContent = `翻译中... ${status.done}/${status.total} (${pct}%)`;
+        if (status.paused) {
+          progressDiv.textContent = `已暂停 ${pct}% (${status.done}/${status.total})`;
+        } else {
+          progressDiv.textContent = `已翻译 ${pct}% (${status.done}/${status.total})`;
+        }
       }
 
-      if (!status.translating) {
+      if (status.paused) {
+        clearInterval(interval);
+        isPaused = true;
+        isTranslating = false;
+        translateBtn.disabled = false;
+        if (btnText) btnText.textContent = '继续翻译';
+        if (btnIcon) btnIcon.textContent = '▶';
+      } else if (!status.translating) {
         clearInterval(interval);
         isTranslating = false;
-        translateBtn.textContent = '重新翻译';
+        isPaused = false;
+        if (btnText) btnText.textContent = '重新翻译';
+        if (btnIcon) btnIcon.textContent = '⚡';
         translateBtn.disabled = false;
-        progressDiv.textContent = `翻译完成 ✓ (${status.done} 段)`;
+        progressDiv.textContent = '翻译完成 ✓';
+        setTimeout(() => { progressDiv.style.display = 'none'; }, 3000);
       }
     } catch {
       clearInterval(interval);

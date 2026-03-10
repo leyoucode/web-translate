@@ -1,7 +1,7 @@
 const OLLAMA_URL = 'http://localhost:11434';
-const DEFAULT_MODEL = 'qwen2:7b';
+const FIXED_MODEL = 'demonbyron/HY-MT1.5-7B';
 
-// Translation cache: key = "model:text", value = translated result
+// Translation cache: key = "text", value = translated result
 const translationCache = new Map();
 const CACHE_MAX_SIZE = 500;
 
@@ -47,39 +47,29 @@ chrome.runtime.onConnect.addListener((port) => {
   });
 });
 
-async function getSelectedModel() {
-  const { selectedModel } = await chrome.storage.local.get('selectedModel');
-  return selectedModel || DEFAULT_MODEL;
-}
-
-function getCacheKey(model, text) {
-  return `${model}:${text}`;
+function getCacheKey(text) {
+  return text;
 }
 
 async function handleCheckOllama(port) {
   try {
     const res = await fetch(`${OLLAMA_URL}/api/tags`);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const data = await res.json();
-    const models = (data.models || []).map((m) => m.name);
     port.postMessage({
       type: 'ollama-status',
       connected: true,
-      models,
     });
   } catch {
     port.postMessage({
       type: 'ollama-status',
       connected: false,
-      models: [],
     });
   }
 }
 
 async function handleTranslate(port, msg) {
   const { text, elementId } = msg;
-  const model = await getSelectedModel();
-  const cacheKey = getCacheKey(model, text);
+  const cacheKey = getCacheKey(text);
 
   // Check cache first
   if (translationCache.has(cacheKey)) {
@@ -98,7 +88,7 @@ async function handleTranslate(port, msg) {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        model,
+        model: FIXED_MODEL,
         stream: true,
         messages: [
           {
