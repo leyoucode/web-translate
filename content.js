@@ -11,6 +11,16 @@
   ]);
 
   const CHINESE_RE = /[\u4e00-\u9fff]/;
+  // 选择最佳 TTS 语音：优先 Google 高质量语音
+  function getBestVoice(lang) {
+    const voices = speechSynthesis.getVoices();
+    const isZh = lang.startsWith('zh');
+    const preferred = isZh ? 'Google 普通话' : 'Google US English';
+    return voices.find(v => v.name.includes(preferred))
+        || voices.find(v => v.name.includes('Google') && v.lang.startsWith(isZh ? 'zh' : 'en'))
+        || voices.find(v => v.lang.startsWith(isZh ? 'zh' : 'en'))
+        || null;
+  }
   const MAX_TEXT_LEN = 500;
   const TRANSLATION_CONCURRENCY = 10;
   const ATTR_TRANSLATED = 'data-wt-translated';
@@ -499,10 +509,11 @@
       e.stopPropagation();
       window.speechSynthesis.cancel();
       const utterance = new SpeechSynthesisUtterance(text.trim());
-      // Try to detect if it's likely English or other non-Chinese
-      if (!CHINESE_RE.test(text)) {
-        utterance.lang = 'en-US';
-      }
+      const lang = CHINESE_RE.test(text) ? 'zh-CN' : 'en-US';
+      utterance.lang = lang;
+      const voice = getBestVoice(lang);
+      if (voice) utterance.voice = voice;
+      utterance.rate = 0.9;
       window.speechSynthesis.speak(utterance);
       
       // Visual feedback
