@@ -4,30 +4,29 @@
 
 ## 特性
 
-- **本地翻译** — 通过本地 Ollama 服务调用大语言模型，数据不离开本机
-- **模型可选** — 自动获取本地已安装的 Ollama 模型列表，自由切换
+- **本地翻译** — 通过本地 Ollama 服务调用 `gemma4:e4b` 模型，数据不离开本机
+- **固定模型** — 当前固定使用本地已下载的 `gemma4:e4b` 模型
 - **双语对照** — 译文显示在原文下方，方便对照阅读
 - **替换原文** — 可切换为替换模式，译文直接替代原文，阅读更沉浸
 - **流式显示** — 翻译结果逐段实时显示，无需等待全部完成
+- **有限并发** — 默认同时翻译 10 个文本块，提升网页翻译吞吐
 - **快捷键翻译** — `Alt+T` 一键翻译当前页面，无需打开弹窗
 - **划词翻译** — 选中文本后右键「翻译选中文本」，结果以浮窗展示
 - **翻译缓存** — 相同内容不重复调用模型，加速重复翻译
 - **智能过滤** — 自动跳过中文内容、代码块、纯数字等无需翻译的内容
-- **视口优先** — 优先翻译当前可见区域的内容
+- **顶部优先** — 按网页从上到下的阅读顺序翻译
 
 ## 前置要求
 
 - [Ollama](https://ollama.ai) 已安装并运行
-- 至少下载一个模型
+- 已下载 `gemma4:e4b` 模型
 
 ```bash
 # 启动 Ollama
 ollama serve
 
-# 下载模型（任选其一或多个）
-ollama pull qwen2:7b
-ollama pull qwen2.5:7b
-ollama pull llama3.1
+# 如未下载模型，先执行
+ollama pull gemma4:e4b
 ```
 
 ## 安装
@@ -43,9 +42,8 @@ ollama pull llama3.1
 1. 打开任意英文网页
 2. 点击浏览器工具栏中的插件图标
 3. 确认 Ollama 连接状态为绿色
-4. 从下拉框选择翻译模型
-5. 选择显示方式（双语对照 / 替换原文）
-6. 点击「翻译此页」
+4. 选择显示方式（双语对照 / 替换原文）
+5. 点击「翻译此页」
 
 ### 快捷键
 - `Alt+T` — 直接翻译当前页面（无需打开弹窗）
@@ -74,7 +72,9 @@ web-translate/
 - **Chrome Extension Manifest V3**
 - **Ollama REST API**（`localhost:11434`），流式响应
 - Service Worker 与 Content Script 通过 `chrome.runtime.connect`（Port）长连接通信
-- 模型选择与显示模式配置通过 `chrome.storage.local` 持久化
+- Content Script 使用 10 个并发 worker 翻译文本块，并按页面顶部到页面底部排序
+- 固定使用 `gemma4:e4b` 模型，显示模式配置通过 `chrome.storage.local` 持久化
+- 按 Gemma 4 建议使用 `temperature=1.0`、`top_p=0.95`、`top_k=64`，不启用 `<|think|>`
 - 通过 `declarativeNetRequest` 重写 `Origin` 请求头，解决 Ollama CORS 403 问题
 
 ## License

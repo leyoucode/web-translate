@@ -1,5 +1,5 @@
 const OLLAMA_URL = 'http://localhost:11434';
-const FIXED_MODEL = 'demonbyron/HY-MT1.5-7B';
+const FIXED_MODEL = 'gemma4:e4b';
 
 // Translation cache: key = "text", value = translated result
 const translationCache = new Map();
@@ -90,15 +90,20 @@ async function handleTranslate(port, msg) {
       body: JSON.stringify({
         model: FIXED_MODEL,
         stream: true,
+        keep_alive: '10m',
+        options: {
+          temperature: 1.0,
+          top_p: 0.95,
+          top_k: 64,
+        },
         messages: [
           {
             role: 'system',
-            content:
-              '你是一个翻译助手。将用户提供的文本翻译成中文，只返回翻译结果，不要添加任何解释、注释或额外内容。',
+            content: '你是专业网页翻译助手。译成简体中文，只输出译文，不解释。',
           },
           {
             role: 'user',
-            content: `翻译以下文本为中文：\n\n${text}`,
+            content: text,
           },
         ],
       }),

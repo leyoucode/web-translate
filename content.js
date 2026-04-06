@@ -12,13 +12,14 @@
 
   const CHINESE_RE = /[\u4e00-\u9fff]/;
   const MAX_TEXT_LEN = 500;
+  const TRANSLATION_CONCURRENCY = 10;
   const ATTR_TRANSLATED = 'data-wt-translated';
   const ATTR_ID = 'data-wt-id';
 
   let port = null;
   let translating = false;
   let paused = false;
-  let resumeResolve = null;
+  let resumeResolvers = [];
   let totalElements = 0;
   let doneElements = 0;
   let progressBar = null;
@@ -63,10 +64,7 @@
       sendResponse({ paused: true });
     } else if (msg.action === 'resumeTranslate') {
       paused = false;
-      if (resumeResolve) {
-        resumeResolve();
-        resumeResolve = null;
-      }
+      resumePausedTranslations();
       updateProgress();
       sendResponse({ paused: false });
     } else if (msg.action === 'getStatus') {
@@ -114,14 +112,6 @@
   function connectPort() {
     port = chrome.runtime.connect({ name: 'translate' });
 
-    port.onMessage.addListener((msg) => {
-      if (msg.type === 'translation-chunk') {
-        updateTranslation(msg.elementId, msg.text, msg.done);
-      } else if (msg.type === 'translation-error') {
-        handleTranslationError(msg.elementId, msg.error);
-      }
-    });
-
     port.onDisconnect.addListener(() => {
       // Reconnect if translation is still in progress
       if (translating) {
@@ -135,7 +125,7 @@
     if (translating) return;
     translating = true;
     paused = false;
-    resumeResolve = null;
+    resumeResolvers = [];
     doneElements = 0;
     idCounter = 0;
 
@@ -153,11 +143,15 @@
 
     updateProgress();
 
-    // Sort by visibility: viewport elements first
-    const sorted = sortByVisibility(elements);
+    // Sort from page top to bottom so translations appear in reading order.
+    const sorted = sortByPagePosition(elements);
 
-    // Translate sequentially to avoid overwhelming Ollama
-    translateSequentially(sorted);
+    translateConcurrently(sorted).catch(() => {
+      translating = false;
+      paused = false;
+      resumeResolvers = [];
+      finishProgress();
+    });
   }
 
   function collectTranslatableElements() {
@@ -213,85 +207,131 @@
     return true;
   }
 
-  function sortByVisibility(elements) {
-    const viewportHeight = window.innerHeight;
+  function sortByPagePosition(elements) {
     return [...elements].sort((a, b) => {
       const rectA = a.getBoundingClientRect();
       const rectB = b.getBoundingClientRect();
-      const inViewA = rectA.top >= 0 && rectA.top <= viewportHeight;
-      const inViewB = rectB.top >= 0 && rectB.top <= viewportHeight;
-      if (inViewA && !inViewB) return -1;
-      if (!inViewA && inViewB) return 1;
-      return rectA.top - rectB.top;
+      const topDiff = (rectA.top + window.scrollY) - (rectB.top + window.scrollY);
+      if (topDiff !== 0) return topDiff;
+      return (rectA.left + window.scrollX) - (rectB.left + window.scrollX);
     });
   }
 
-  async function translateSequentially(elements) {
-    for (const el of elements) {
-      if (!translating) break;
+  async function translateConcurrently(elements) {
+    let nextIndex = 0;
+    const workerCount = Math.min(TRANSLATION_CONCURRENCY, elements.length);
 
-      // Wait if paused
-      if (paused) {
-        await new Promise((r) => { resumeResolve = r; });
+    async function worker() {
+      while (translating) {
+        if (nextIndex >= elements.length) break;
+
+        await waitIfPaused();
+        if (!translating) break;
+
+        const currentIndex = nextIndex++;
+        if (currentIndex >= elements.length) break;
+
+        await translateElement(elements[currentIndex]);
       }
-      if (!translating) break;
-
-      const text = getDirectText(el);
-      if (!text) {
-        doneElements++;
-        updateProgress();
-        continue;
-      }
-
-      const elId = `wt-${idCounter++}`;
-      el.setAttribute(ATTR_ID, elId);
-      el.setAttribute(ATTR_TRANSLATED, 'pending');
-
-      // Insert placeholder
-      insertTranslationElement(el, elId, '翻译中...');
-
-      // Split long text
-      const chunks = text.length > MAX_TEXT_LEN ? splitText(text) : [text];
-      const fullText = chunks.join('\n');
-
-      await new Promise((resolve) => {
-        const handler = (msg) => {
-          if (msg.elementId !== elId) return;
-          if (msg.type === 'translation-chunk') {
-            updateTranslation(elId, msg.text, msg.done);
-            if (msg.done) {
-              port.onMessage.removeListener(handler);
-              el.setAttribute(ATTR_TRANSLATED, 'done');
-              doneElements++;
-              updateProgress();
-              resolve();
-            }
-          } else if (msg.type === 'translation-error') {
-            updateTranslation(elId, `⚠️ ${msg.error}`, true);
-            el.setAttribute(ATTR_TRANSLATED, 'error');
-            doneElements++;
-            updateProgress();
-            port.onMessage.removeListener(handler);
-            resolve();
-          }
-        };
-        port.onMessage.addListener(handler);
-
-        try {
-          port.postMessage({ type: 'translate', text: fullText, elementId: elId });
-        } catch {
-          // Port disconnected — reconnect and retry
-          connectPort();
-          port.onMessage.addListener(handler);
-          port.postMessage({ type: 'translate', text: fullText, elementId: elId });
-        }
-      });
     }
+
+    await Promise.all(Array.from({ length: workerCount }, () => worker()));
 
     translating = false;
     paused = false;
-    resumeResolve = null;
+    resumeResolvers = [];
     finishProgress();
+  }
+
+  function waitIfPaused() {
+    if (!paused) return Promise.resolve();
+    return new Promise((resolve) => {
+      resumeResolvers.push(resolve);
+    });
+  }
+
+  function resumePausedTranslations() {
+    const resolvers = resumeResolvers;
+    resumeResolvers = [];
+    resolvers.forEach((resolve) => resolve());
+  }
+
+  async function translateElement(el) {
+    const text = getDirectText(el);
+    if (!shouldTranslate(text)) {
+      doneElements++;
+      updateProgress();
+      return;
+    }
+
+    const elId = `wt-${idCounter++}`;
+    el.setAttribute(ATTR_ID, elId);
+    el.setAttribute(ATTR_TRANSLATED, 'pending');
+
+    insertTranslationElement(el, elId, '翻译中...');
+
+    const chunks = text.length > MAX_TEXT_LEN ? splitText(text) : [text];
+    const fullText = chunks.join('\n');
+
+    await sendTranslationRequest(el, elId, fullText);
+  }
+
+  function sendTranslationRequest(el, elId, fullText) {
+    return new Promise((resolve) => {
+      let activePort = null;
+
+      const removeHandler = () => {
+        if (activePort) activePort.onMessage.removeListener(handler);
+      };
+
+      const finish = () => {
+        removeHandler();
+        resolve();
+      };
+
+      const finishWithError = (error) => {
+        updateTranslation(elId, `⚠️ ${error}`, true);
+        el.setAttribute(ATTR_TRANSLATED, 'error');
+        doneElements++;
+        updateProgress();
+        finish();
+      };
+
+      const handler = (msg) => {
+        if (msg.elementId !== elId) return;
+        if (msg.type === 'translation-chunk') {
+          updateTranslation(elId, msg.text, msg.done);
+          if (msg.done) {
+            el.setAttribute(ATTR_TRANSLATED, 'done');
+            doneElements++;
+            updateProgress();
+            finish();
+          }
+        } else if (msg.type === 'translation-error') {
+          finishWithError(msg.error || '翻译失败');
+        }
+      };
+
+      const postMessage = () => {
+        if (!port) connectPort();
+        activePort = port;
+        activePort.onMessage.addListener(handler);
+        activePort.postMessage({ type: 'translate', text: fullText, elementId: elId });
+      };
+
+      try {
+        postMessage();
+      } catch {
+        removeHandler();
+        try {
+          connectPort();
+          postMessage();
+        } catch (err) {
+          removeHandler();
+          finishWithError(err.message || '连接失败');
+        }
+      }
+    });
   }
 
   function splitText(text) {
@@ -335,13 +375,6 @@
     }
   }
 
-  function handleTranslationError(elId, error) {
-    const div = document.getElementById(`wt-trans-${elId}`);
-    if (!div) return;
-    div.textContent = `⚠️ ${error}`;
-    div.classList.add('wt-translation-error');
-  }
-
   function toggleTranslations() {
     translationsVisible = !translationsVisible;
     const translations = document.querySelectorAll('.wt-translation');
@@ -375,10 +408,7 @@
     pauseBtn.addEventListener('click', () => {
       if (paused) {
         paused = false;
-        if (resumeResolve) {
-          resumeResolve();
-          resumeResolve = null;
-        }
+        resumePausedTranslations();
         pauseBtn.textContent = '⏸';
         pauseBtn.title = '暂停翻译';
         updateProgress();
